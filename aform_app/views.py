@@ -1,3 +1,8 @@
-from django.shortcuts import render
+from rest_framework import viewsets
+from .models import Form
+from .serializers import FormSerializer
 
-# Create your views here.
+class FormViewSet(viewsets.ModelViewSet):
+    queryset = Form.objects.all()
+    serializer_class = FormSerializer
+
