@@ -40,4 +40,12 @@ class Field(models.Model):
 class Form(models.Model):
     title = models.CharField(max_length=300, blank=False, null=False)
     organization = models.ForeignKey(Organization, blank=False, null=True, related_name='organization', on_delete=models.CASCADE)
-    fields = models.ManyToManyField(Field)
+    fields = models.ManyToManyField('Field', through='FormField')
+
+class FormField(models.Model):
+    form = models.ForeignKey(Form, on_delete=models.CASCADE)
+    field = models.ForeignKey(Field, on_delete=models.CASCADE)
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ('form', 'field')
