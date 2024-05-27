@@ -28,3 +28,5 @@ dist/
 
 # Ignore PyCharm / IntelliJ files
 .idea/
+
+form_git_ignore.json

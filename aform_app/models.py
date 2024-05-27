@@ -27,25 +27,77 @@ class FieldProperty(models.Model):
     choices = models.JSONField(blank=True, null=True)
     lables = models.JSONField(blank=True, null=True)
 
+class Form(models.Model):
+    title = models.CharField(max_length=300, blank=False, null=False)
+    organization = models.ForeignKey(Organization, blank=False, null=True, related_name='organization', on_delete=models.CASCADE)
+
 class Field(models.Model):
     title = models.CharField(max_length=500, blank=False, null=False)
     description = models.CharField(max_length=1000, blank=False, null=False)
-    ref = models.CharField(max_length=200, blank=False, null=False, unique=True)
+    ref = models.CharField(max_length=200, blank=False, null=False)
     type = models.CharField(choices=QUESTION_TYPES, default=QUESTION_TYPES[1], null=False, blank=False)
     
     layout = models.JSONField(blank=True, null=True)
 
     properties = models.OneToOneField(FieldProperty, on_delete=models.CASCADE, primary_key=True)
 
-class Form(models.Model):
-    title = models.CharField(max_length=300, blank=False, null=False)
-    organization = models.ForeignKey(Organization, blank=False, null=True, related_name='organization', on_delete=models.CASCADE)
-    fields = models.ManyToManyField('Field', through='FormField')
-
-class FormField(models.Model):
-    form = models.ForeignKey(Form, on_delete=models.CASCADE)
-    field = models.ForeignKey(Field, on_delete=models.CASCADE)
+    form = models.ForeignKey(Form, on_delete=models.CASCADE, related_name='fields', null=True, blank=True)
     order = models.IntegerField(default=0)
 
-    class Meta:
-        unique_together = ('form', 'field')
+class Logic(models.Model):
+    FIELD = 'field'
+    HIDDEN = 'constant'
+
+    TYPE_CHOICES = {
+        Field: 'field',
+        HIDDEN: 'hidden'
+    }
+
+    form = models.ForeignKey(Form, on_delete=models.CASCADE, related_name='logic', blank=True, null=True)
+    type = models.CharField(choices=TYPE_CHOICES, default=FIELD, null=False, blank=False)
+    ref = models.CharField(max_length=200, blank=False, null=False)
+    order = models.IntegerField(default=0)
+
+class Condition(models.Model):
+    CONDITION_OPERATORS = [
+        ('equal', 'equal'),
+        ('is', 'is'),
+        ('is_not', 'is_not'),
+        ('greater', 'greater'),
+        ('less_than', 'less_than'),
+        ('and', 'and'),
+        ('or', 'or')
+    ]
+
+    operator = models.CharField(max_length=10, choices=CONDITION_OPERATORS, blank=True, null=True)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    order = models.IntegerField(default=1)
+
+class ConditionVariable(models.Model):
+    condition = models.ForeignKey(Condition, related_name='vars', on_delete=models.CASCADE, null=True, blank=True)
+    type = models.CharField(max_length=20)
+    value = models.CharField(max_length=200)
+
+
+class Actions(models.Model):
+    JUMP = 'jump'
+    ADD = 'add'
+    SUBTRACT = 'subtract'
+    MULTIPLY = 'multiply'
+    DIVIDE = 'divide'
+
+    ACTION_CHOICES = {
+        JUMP: 'jump',
+        ADD: 'add',
+        SUBTRACT: 'subtract',
+        MULTIPLY: 'multiply',
+        DIVIDE: 'divide'
+    }
+    logic=models.ForeignKey(Logic, related_name='actions', blank=True, null=True, on_delete=models.CASCADE)
+    order = models.IntegerField(default=0)
+
+    action = models.CharField(choices=ACTION_CHOICES, null=False, blank=False)
+    condition = models.OneToOneField(Condition, null=True, blank=True, related_name='condition', on_delete=models.CASCADE)
+
+    details = models.JSONField()
+
