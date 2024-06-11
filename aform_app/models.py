@@ -22,6 +22,7 @@ class FieldProperty(models.Model):
     steps = models.IntegerField(default = 10)
     shape = models.CharField(choices=RATING_CHOICES, default=STAR)
     start_at_one = models.BooleanField(default=False)
+    description = models.CharField(max_length=1000, blank=True, null=True)
 
 
     choices = models.JSONField(blank=True, null=True)
@@ -33,7 +34,6 @@ class Form(models.Model):
 
 class Field(models.Model):
     title = models.CharField(max_length=500, blank=False, null=False)
-    description = models.CharField(max_length=1000, blank=False, null=False)
     ref = models.CharField(max_length=200, blank=False, null=False)
     type = models.CharField(choices=QUESTION_TYPES, default=QUESTION_TYPES[1], null=False, blank=False)
     
@@ -49,7 +49,7 @@ class Logic(models.Model):
     HIDDEN = 'constant'
 
     TYPE_CHOICES = {
-        Field: 'field',
+        FIELD: 'field',
         HIDDEN: 'hidden'
     }
 
@@ -66,17 +66,17 @@ class Condition(models.Model):
         ('greater', 'greater'),
         ('less_than', 'less_than'),
         ('and', 'and'),
-        ('or', 'or')
+        ('or', 'or'),
+        ('contains', 'contains')
     ]
 
     operator = models.CharField(max_length=10, choices=CONDITION_OPERATORS, blank=True, null=True)
-    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, default=None, null=True, blank=True, related_name='vars')
     order = models.IntegerField(default=1)
 
-class ConditionVariable(models.Model):
-    condition = models.ForeignKey(Condition, related_name='vars', on_delete=models.CASCADE, null=True, blank=True)
-    type = models.CharField(max_length=20)
-    value = models.CharField(max_length=200)
+    type = models.CharField(max_length=30, null=True, blank=True)
+    value = models.CharField(max_length=200, null=True, blank=True)
+
 
 
 class Actions(models.Model):
