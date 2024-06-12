@@ -3,6 +3,7 @@ from .models import Form
 from .serializers import FormSerializer
 from rest_framework.response import Response
 from rest_framework import status
+from .paginations import StandardResultsSetPagination
 
 class FormViewSet(viewsets.ViewSet):
     queryset = Form.objects.all()
@@ -20,8 +21,11 @@ class FormViewSet(viewsets.ViewSet):
         return Response(serailized_data.data)
 
     def list(self, request):
-        serializer = FormSerializer(self.queryset, many=True)
-        return Response(serializer.data)
+        paginator = StandardResultsSetPagination()
+        paginator.page_size = 10  # or any number you prefer
+        result_page = paginator.paginate_queryset(self.queryset, request)
+        serializer = FormSerializer(result_page, many=True)
+        return paginator.get_paginated_response(serializer.data)
     
     def update(self, request, pk=None):
         try:

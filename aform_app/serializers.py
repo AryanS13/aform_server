@@ -1,21 +1,8 @@
 from rest_framework import serializers
 from .models import Form, Field, FieldProperty, Logic, Actions, Condition
-
-class VarSerializer(serializers.ModelSerializer):
-
-    def to_representation(self, instance):
-        print(instance)
-        return super().to_representation(instance)
-    class Meta:
-        model = Condition
-        # fields = ('operator', 'order', 'type', 'value', 'vars', )
-        fields = '__all__'
-    
-    def is_valid(self, data):
-        print(data)
             
 class ConditionSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
+    id = serializers.IntegerField(required=False)
     # vars 
 
     class Meta:
@@ -27,53 +14,71 @@ class ConditionSerializer(serializers.ModelSerializer):
         fields['vars'] = ConditionSerializer(many=True, required=False, allow_null=True)
         return fields
 
+    # def create(self, validated_data):
+    #     vars_data = validated_data.pop('vars', [])
+    #     condition = Condition.objects.create(**validated_data)
+
+    #     condition_vars = []
+    #     for var_data in vars_data:
+    #         var_instance = ConditionSerializer().create(var_data)
+    #         var_instance.parent = condition
+    #         var_instance.save()
+    #         condition_vars.append(var_instance)
+
+    #     condition.vars.set(condition_vars)
+    #     return condition
+    
     def create(self, validated_data):
         vars_data = validated_data.pop('vars', [])
         condition = Condition.objects.create(**validated_data)
-
-        condition_vars = []
-        for var_data in vars_data:
-            var_instance = ConditionSerializer().create(var_data)
-            var_instance.parent = condition
-            var_instance.save()
-            condition_vars.append(var_instance)
-
-        condition.vars.set(condition_vars)
+        self._create_or_update_vars(condition, vars_data)
         return condition
-
+    
     def update(self, instance, validated_data):
         vars_data = validated_data.pop('vars', [])
         instance.operator = validated_data.get('operator', instance.operator)
+        instance.order = validated_data.get('order', instance.order)
         instance.type = validated_data.get('type', instance.type)
         instance.value = validated_data.get('value', instance.value)
         instance.save()
+        self._create_or_update_vars(instance, vars_data)
+        return instance
 
+    def _create_or_update_vars(self, parent_instance, vars_data):
         keep_vars = []
         for var_data in vars_data:
-            if "id" in var_data.keys():
-                if Condition.objects.filter(id=var_data["id"]).exists():
-                    var = Condition.objects.get(id=var_data["id"])
-                    var.operator = var_data.get('operator', var.operator)
-                    var.type = var_data.get('type', var.type)
-                    var.value = var_data.get('value', var.value)
-                    var.save()
-                    keep_vars.append(var.id)
-                else:
+            var_id = var_data.get('id')
+            if var_id:
+                try:
+                    var_instance = Condition.objects.get(id=var_id)
+                    ConditionSerializer().update(var_instance, var_data)
+                    keep_vars.append(var_instance.id)
+                except Condition.DoesNotExist:
                     continue
             else:
-                var = Condition.objects.create(**var_data)
-                var.parent = instance
-                var.save()
-                keep_vars.append(var.id)
+                var_instance = ConditionSerializer().create(var_data)
+                var_instance.parent = parent_instance
+                var_instance.save()
+                keep_vars.append(var_instance.id)
+        
+        # Delete vars not in the updated list
+        for var in parent_instance.vars.all():
+            if var.id not in keep_vars:
+                var.delete()
+        
+        # Add or update vars
+        parent_instance.vars.set(Condition.objects.filter(id__in=keep_vars))
 
-        instance.vars.exclude(id__in=keep_vars).delete()
-        return instance
+    def to_internal_value(self, data):
+        if isinstance(data, list):
+            return [self.child.to_internal_value(item) for item in data]
+        return super().to_internal_value(data)
 
 
 
 class ActionSerializer(serializers.ModelSerializer):
     condition = ConditionSerializer()
-    id = serializers.IntegerField(read_only=True)
+    id = serializers.IntegerField(required=False)
 
     class Meta:
         model = Actions
@@ -87,31 +92,30 @@ class ActionSerializer(serializers.ModelSerializer):
         condition = ConditionSerializer.create(ConditionSerializer(), validated_data=condition_data)
         action = Actions.objects.create(condition=condition, **validated_data)
         return action
-
+    
     def update(self, instance, validated_data):
-        condition = validated_data.get('condition', None)
+        condition_data = validated_data.get('condition', None)
 
-        instance.details = validated_data.get('details', None)
-        instance.action = validated_data.get('action', 'jump')
-        instance.order = validated_data.get('order', None)
+        instance.details = validated_data.get('details', instance.details)
+        instance.action = validated_data.get('action', instance.action)
+        instance.order = validated_data.get('order', instance.order)
 
         instance.save()
 
-
-        if condition and condition.get('id', None):
-            condition_ = Condition.objects.get(id=condition.get('id', None), condition=instance)
-            ConditionSerializer.update(ConditionSerializer(), condition_, condition)
+        if condition_data and condition_data.get('id', None):
+            condition_instance = Condition.objects.get(id=condition_data.get('id', None))
+            ConditionSerializer.update(ConditionSerializer(), condition_instance, condition_data)
         else:
-            condition_ = ConditionSerializer.create(condition)
-            instance.condition = condition_
+            condition_instance = ConditionSerializer.create(ConditionSerializer(), validated_data=condition_data)
+            instance.condition = condition_instance
             instance.save()
-        
+
         return instance
             
 
 class LogicSerializer(serializers.ModelSerializer):
     actions = ActionSerializer(many=True)
-    id = serializers.IntegerField(read_only=True)
+    id = serializers.IntegerField(required=False)
 
     class Meta:
         model = Logic
@@ -128,31 +132,34 @@ class LogicSerializer(serializers.ModelSerializer):
         return logic
     
     def update(self, instance, validated_data):
-        actions_data = validated_data.get('actions', None)
-       
+        actions_data = validated_data.pop('actions', [])
 
-        instance.ref = validated_data.get('ref', None)
-        instance.type = validated_data.get('type', None)
-        instance.order =  validated_data.get('order', None)
+        instance.ref = validated_data.get('ref', instance.ref)
+        instance.type = validated_data.get('type', instance.type)
+        instance.order = validated_data.get('order', instance.order)
 
         instance.save()
 
-        # Update or create actions
+        keep_actions = []
         for action_data in actions_data:
-        
-
-            action_id = action_data.get('id')
-            if action_id:
-                action_instance = Actions.objects.get(id=action_id, logic=instance)
-                ActionSerializer.update(ActionSerializer(), instance=action_instance, validated_data=action_data)
+            if "id" in action_data.keys():
+                if Actions.objects.filter(id=action_data["id"]).exists():
+                    action = Actions.objects.get(id=action_data["id"])
+                    ActionSerializer.update(ActionSerializer(), action, action_data)
+                    keep_actions.append(action.id)
+                else:
+                    continue
             else:
                 action_data['logic'] = instance
-                ActionSerializer.create(ActionSerializer(), validated_data=action_data)
-        
+                action = ActionSerializer.create(ActionSerializer(), validated_data=action_data)
+                keep_actions.append(action.id)
+
+        instance.actions.exclude(id__in=keep_actions).delete()
+        return instance   
 
 
 class FieldPropertySerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
+    id = serializers.IntegerField(required=False)
     class Meta:
         model = FieldProperty
         fields = '__all__'
@@ -179,7 +186,7 @@ class FieldPropertySerializer(serializers.ModelSerializer):
 
 class FieldSerializer(serializers.ModelSerializer):
     properties = FieldPropertySerializer()
-    # id = serializers.IntegerField(read_only=True)
+    id = serializers.IntegerField(required=False)
 
     class Meta:
         model = Field
@@ -233,44 +240,42 @@ class FormSerializer(serializers.ModelSerializer):
         return form
     
     def update(self, instance, validated_data):
-        fields_data = validated_data.pop('fields', None)
-        logic_data = validated_data.pop('logic', None)
+        fields_data = validated_data.pop('fields', [])
+        logic_data = validated_data.pop('logic', [])
 
-        instance.title = validated_data.get('title', None)
-        instance.organization = validated_data.get('organization', None)
+        instance.title = validated_data.get('title', instance.title)
+        instance.organization = validated_data.get('organization', instance.organization)
         instance.save()
 
+        keep_fields = []
         for field_data in fields_data:
-           
-            property = field_data.get('properties')
 
-            id = property.get('id', None)
-
-            field_data['id'] = id
-
-            print('My id is propertys', id)
-
-            field = Field.objects.get(pk=id)
-
-            if field is not None:
-                # Update existing object
-                FieldSerializer.update(FieldSerializer(), instance=field, validated_data=field_data)
+            # since field is connected as common FK relation with property need a proper way, IDK what to do here as of now
+            properties = field_data.get('properties', None)
+            field_id = properties.get('id', None) if properties else None
+            if field_id and Field.objects.filter(pk=field_id).exists():
+                field_instance = Field.objects.get(pk=field_id)
+                FieldSerializer.update(FieldSerializer(), field_instance, field_data)
+                keep_fields.append(field_instance.pk)
             else:
-                #Create new Field object 
                 field_data['form'] = instance
-                FieldSerializer.create(FieldSerializer(), field_data)
-    
-        for logic_item in logic_data:
-            id = logic_item.get('id', None)
-            logic = Logic.objects.get(pk=id)
+                field_instance = FieldSerializer.create(FieldSerializer(), validated_data=field_data)
+                keep_fields.append(field_instance.id)
 
-            if logic is not None:
-                # Update existing object
-                LogicSerializer.update(LogicSerializer(), instance=logic, validated_data=logic_item)
+        instance.fields.exclude(pk__in=keep_fields).delete()
+
+        keep_logics = []
+        for logic_data_item in logic_data:
+            logic_id = logic_data_item.get('id')
+            if logic_id and Logic.objects.filter(id=logic_id).exists():
+                logic_instance = Logic.objects.get(id=logic_id)
+                LogicSerializer.update(LogicSerializer(), logic_instance, logic_data_item)
+                keep_logics.append(logic_instance.id)
             else:
-                #Create new Field object
-                logic_item['form'] = instance
-                LogicSerializer.create(LogicSerializer(), logic_item)
-        
-        return instance
+                logic_data_item['form'] = instance
+                logic_instance = LogicSerializer.create(LogicSerializer(), validated_data=logic_data_item)
+                keep_logics.append(logic_instance.id)
 
+        instance.logic.exclude(id__in=keep_logics).delete()
+
+        return instance
