@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Form, Field, FieldProperty, Logic, Actions, Condition
+from user_app.serializers import UserSerializer
             
 class ConditionSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
@@ -220,6 +221,7 @@ class FieldSerializer(serializers.ModelSerializer):
 class FormSerializer(serializers.ModelSerializer):
     fields = FieldSerializer(many=True)
     logic = LogicSerializer(many=True)
+    # owner = UserSerializer(read_only=True)
 
     class Meta:
         model = Form

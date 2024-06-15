@@ -6,7 +6,6 @@ class Organization(models.Model):
 
 class User(AbstractUser):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True, blank=False)
-    pass
 
 
 

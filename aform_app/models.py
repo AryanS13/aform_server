@@ -1,5 +1,5 @@
 from django.db import models
-from user_app.models import Organization
+from user_app.models import Organization, User
 from .utils import QUESTION_TYPES
 
 # Create your models here.properties
@@ -31,6 +31,7 @@ class FieldProperty(models.Model):
 class Form(models.Model):
     title = models.CharField(max_length=300, blank=False, null=False)
     organization = models.ForeignKey(Organization, blank=False, null=True, related_name='organization', on_delete=models.CASCADE)
+    owner = models.ForeignKey(User, blank=False, null=True, related_name='owner', on_delete=models.CASCADE)
 
 class Field(models.Model):
     title = models.CharField(max_length=500, blank=False, null=False)
