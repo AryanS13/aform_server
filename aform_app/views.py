@@ -11,7 +11,7 @@ class FormViewSet(viewsets.ModelViewSet):
     serializer_class = FormSerializer
 
     def get_queryset(self):
-        return  Form.objects.filter(owner=self.request.user)
+        return Form.objects.filter(owner=self.request.user)
 
     def create(self, request):
         serializer = FormSerializer(data=request.data)
@@ -30,7 +30,7 @@ class FormViewSet(viewsets.ModelViewSet):
     
     # def list(self, request):
     #     print(request.user)
-    #     form = self.queryset.filter()
+    #     form = self.get_queryset()
     #     serailized_data = FormSerializer(form, many=True)
     #     return Response(serailized_data.data)
 
